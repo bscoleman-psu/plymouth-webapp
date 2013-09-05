@@ -598,6 +598,177 @@ class HUBSQL
 	}
 
 /**
+ * add a Daily Task Item into the MySQL hub database
+ * 
+ * @access public
+ *
+ */ 
+	function addDailyTask($data, $now) 
+	{
+		$sql = "INSERT INTO bm_dailytasks
+							(
+							  done,
+								t_datetime,
+								task,
+								loc_code,
+								loc_desc,
+								assigned_user,
+								doneby_user,
+								items_todo,
+								staff_note,
+								bm_note,
+								a_pidm,
+								a_id,
+								a_lastname,
+								a_firstname,
+								db_pidm,
+								db_id,
+								db_lastname,
+								db_firstname,
+								created,
+								modified
+							)
+						VALUES 
+							(
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?
+							)";
+
+		$rs = PSU::db('hub')->Execute($sql,
+						array(
+							  $data['done'],
+								$data['t_datetime'],
+								$data['task'],
+								$data['loc_code'],
+								$data['loc_desc'],
+								$data['assigned_user'],
+								$data['doneby_user'],
+								$data['items_todo'],
+								$data['staff_note'],
+								$data['bm_note'],
+								$data['a_pidm'],
+								$data['a_id'],
+								$data['a_lastname'],
+								$data['a_firstname'],
+								$data['db_pidm'],
+								$data['db_id'],
+								$data['db_lastname'],
+								$data['db_firstname'],
+								$now,
+								$now
+							));
+
+		if ($rs == false)
+		{
+			$this->error = "SQL Error: ".PSU::db('hub')->ErrorMsg();
+			die("SQL Error: " . PSU::db('hub')->ErrorMsg());
+			return $rs;
+		}
+					
+		$task_id = PSU::db('hub')->Insert_ID();
+
+	return $task_id;
+	}
+/**
+ * update a Daily Task Item in the MySQL hub database
+ * 
+ * @access public
+ *
+ */ 
+	function updateDailyTask($data, $now) 
+	{
+		// get previously saved version of the report...
+		$dt = $this->getDailyTask($data['id']);
+
+		$data['modified'] = $now;
+		$data['created'] = $dt['created'];
+
+		// Since using MySQL, can use a single REPLACE instead of check for existence
+		// and then having to use INSERT or UPDATE
+		//
+		$sql = " UPDATE bm_dailytasks
+							SET 
+								done=?,
+								t_datetime=?,
+								task=?,
+								loc_code=?,
+								loc_desc=?,
+								assigned_user=?,
+								doneby_user=?,
+								items_todo=?,
+								staff_note=?,
+								bm_note=?,
+								a_pidm=?,
+								a_id=?,
+								a_lastname=?,
+								a_firstname=?,
+								db_pidm=?,
+								db_id=?,
+								db_lastname=?,
+								db_firstname=?,
+								created=?,
+								modified=?
+						WHERE id=?";
+
+		$rs = PSU::db('hub')->Execute($sql,
+						array(
+							  $data['done'],
+								$data['t_datetime'],
+								$data['task'],
+								$data['loc_code'],
+								$data['loc_desc'],
+								$data['assigned_user'],
+								$data['doneby_user'],
+								$data['items_todo'],
+								$data['staff_note'],
+								$data['bm_note'],
+								$data['a_pidm'],
+								$data['a_id'],
+								$data['a_lastname'],
+								$data['a_firstname'],
+								$data['db_pidm'],
+								$data['db_id'],
+								$data['db_lastname'],
+								$data['db_firstname'],
+								$data['created'],
+								$data['modified'],
+								$data['id']
+								));
+
+	}
+
+/**
+ * add an Accident Report to the MySQL hub database
+ * 
+ * @access public
+ *
+ */ 
+	function getDailyTask($id) 
+	{
+    $sql = "SELECT * FROM `bm_dailytasks` dailytask WHERE dailytask.id=?";
+
+		return PSU::db('hub')->GetRow($sql, array($id));
+	}
+
+/**
  * add an Incident Report to the MySQL hub database
  * 
  * @param int $pidm 

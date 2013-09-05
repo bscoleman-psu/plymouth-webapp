@@ -60,6 +60,35 @@ class ResLifeSQL
     return PSU::db('reslife')->GetOne($sql, array($config_id));
   }
 
+/**
+ *
+ * @param string $config_id
+ * @access public
+ * @return value of the passed config value
+ * 
+ */
+  function setConfigValue($config_id, $data)
+	{
+		$sql = "REPLACE INTO reslife_config 
+							( 
+							config_id,
+							config_value
+							)
+						VALUES 
+							(
+							  ?,
+								?
+							)";
+
+		$rs = PSU::db('reslife')->Execute($sql,
+						array(
+								$config_id,
+								$data,
+								));
+
+		return $rs;
+	}
+
 
 /**
  * add an Incident Report to the MySQL reslife database
@@ -224,7 +253,8 @@ class ResLifeSQL
 		//
 		if (isset($admin))
 		{
-			$sql = "SELECT * FROM `housing_app_terms` terms";
+			$sql = "SELECT * FROM `housing_app_terms` ORDER BY `housing_app_terms`.`year_term` DESC";
+
 			$rs = PSU::db('reslife')->Execute($sql);
 		}
 	else
@@ -1999,6 +2029,26 @@ class ResLifeSQL
  * @return string of query
  *
  */ 
+	function getAllHousingAppsByYearType($year_term,$application_type) 
+	{
+		$sql = "SELECT * FROM `housing_app` apps WHERE apps.year_term=? AND apps.application_type=?";
+
+		if ($rs = PSU::db('reslife')->Execute($sql, array($year_term,$application_type)))
+			return $rs->GetRows();
+		else
+		{
+			return null;
+		}
+	}
+
+/**
+ * get The saved on-line app settings for this student
+ * 
+ * @param int $pidm 
+ * @access public
+ * @return string of query
+ *
+ */ 
 	function getHousingApp($pidm,$area,$year_term,$application_type) 
 	{
 		$sql = "SELECT rank.ranking as rank_ranking, app.*
@@ -2078,8 +2128,10 @@ mysql  if($results = PSU::db('reslife')->Execute/getRow/fetch($sql, array($pidm)
 	{
 		$data['pidm'] = $pidm;
 
-		$data['signed_leasedining'] = '';
-		$data['signed_foryear'] = '';
+		if ($data['signed_leasedining'] != 'LEAS')
+			$data['signed_leasedining'] = '';
+		if ($data['signed_foryear'] != 'YEAR')
+			$data['signed_foryear'] = '';
 
 		if (isset($data['signatures']))
 		{
