@@ -39,6 +39,57 @@ class ResLifeSQL
   {
   }
 
+  public $reslife_config_id_msgofday = 'message_of_the_day';
+  public $reslife_config_id_housingapp_email_closing = 'housingapp_email_closing_';
+  public $reslife_config_id_housingapp_email_contact = 'housingapp_email_contact_';
+  public $reslife_config_id_housingapp_email_year = 'housingapp_email_year';
+
+/**
+ *
+ * @param string $config_id
+ * @access public
+ * @return value of the passed config value
+ * 
+ **/
+  function getConfigValue($config_id)
+  {
+    $sql = "SELECT config_value
+              FROM `reslife_config`
+              WHERE config_id=?";
+
+    return PSU::db('reslife')->GetOne($sql, array($config_id));
+  }
+
+/**
+ *
+ * @param string $config_id
+ * @access public
+ * @return value of the passed config value
+ * 
+ */
+  function setConfigValue($config_id, $data)
+	{
+		$sql = "REPLACE INTO reslife_config 
+							( 
+							config_id,
+							config_value
+							)
+						VALUES 
+							(
+							  ?,
+								?
+							)";
+
+		$rs = PSU::db('reslife')->Execute($sql,
+						array(
+								$config_id,
+								$data,
+								));
+
+		return $rs;
+	}
+
+
 /**
  * add an Incident Report to the MySQL reslife database
  * 
@@ -202,7 +253,8 @@ class ResLifeSQL
 		//
 		if (isset($admin))
 		{
-			$sql = "SELECT * FROM `housing_app_terms` terms";
+			$sql = "SELECT * FROM `housing_app_terms` ORDER BY `housing_app_terms`.`year_term` DESC";
+
 			$rs = PSU::db('reslife')->Execute($sql);
 		}
 	else
@@ -1539,7 +1591,8 @@ class ResLifeSQL
 									 ON slrpreq.slrpreq_rdef_code=stvrdef.stvrdef_code
 								WHERE slrpreq.slrpreq_term_code IN (:term, :gterm)
 									AND slrpreq.slrpreq_pidm='".$student_id."'
-									AND slrpreq.slrpreq_rdef_code='SM'";
+									AND (slrpreq.slrpreq_rdef_code='SM' OR
+											slrpreq.slrpreq_rdef_code='NP' ) ";
 
 		$rs = PSU::db('banner')->Execute($sql, compact('term', 'gterm'));
 		return $rs->FetchRow();
@@ -1976,6 +2029,26 @@ class ResLifeSQL
  * @return string of query
  *
  */ 
+	function getAllHousingAppsByYearType($year_term,$application_type) 
+	{
+		$sql = "SELECT * FROM `housing_app` apps WHERE apps.year_term=? AND apps.application_type=?";
+
+		if ($rs = PSU::db('reslife')->Execute($sql, array($year_term,$application_type)))
+			return $rs->GetRows();
+		else
+		{
+			return null;
+		}
+	}
+
+/**
+ * get The saved on-line app settings for this student
+ * 
+ * @param int $pidm 
+ * @access public
+ * @return string of query
+ *
+ */ 
 	function getHousingApp($pidm,$area,$year_term,$application_type) 
 	{
 		$sql = "SELECT rank.ranking as rank_ranking, app.*
@@ -2055,6 +2128,296 @@ mysql  if($results = PSU::db('reslife')->Execute/getRow/fetch($sql, array($pidm)
 	{
 		$data['pidm'] = $pidm;
 
+		if ($data['signed_leasedining'] != 'LEAS')
+			$data['signed_leasedining'] = '';
+		if ($data['signed_foryear'] != 'YEAR')
+			$data['signed_foryear'] = '';
+
+		if (isset($data['signatures']))
+		{
+			if (in_array("LEAS", $data['signatures']))
+				$data['signed_leasedining'] = "LEAS";
+			if (in_array("YEAR", $data['signatures']))
+				$data['signed_foryear'] = "YEAR";
+		}
+			
+		$ranking = $this->getRanking($pidm);
+
+		$housingapp = $this->getHousingApp($pidm, $area, $data['year_term'], $data['application_type']);
+
+		if ($housingapp['housing_area'] == "RN"  && $admin== true)
+			$area = "RN";		// make sure area is correct if running as admin 
+
+		$data['housing_area'] = $area;
+
+		if ($area == "RN")
+		{
+			$roompick = array();
+			if (isset($data['roompick1']))
+				$roompick = array_merge($roompick, $data['roompick1']);
+			if (isset($data['roompick2']))
+				$roompick = array_merge($roompick, $data['roompick2']);
+			if (isset($data['roompick3']))
+				$roompick = array_merge($roompick, $data['roompick3']);
+			if (isset($roompick))
+			{
+				$data['rnroompicks'] = implode(",",$roompick);
+				$data['rn_roompick_lws'] = (in_array('LWS', $roompick)) ? 1 : 0;
+				$data['rn_roompick_lwd'] = (in_array('LWD', $roompick)) ? 1 : 0;
+				$data['rn_roompick_lw4'] = (in_array('LW4', $roompick)) ? 1 : 0;
+				$data['rn_roompick_a24'] = (in_array('A24', $roompick)) ? 1 : 0;
+				$data['rn_roompick_a22'] = (in_array('A22', $roompick)) ? 1 : 0;
+				$data['rn_roompick_a12'] = (in_array('A12', $roompick)) ? 1 : 0;
+				$data['rn_roompick_a11'] = (in_array('A11', $roompick)) ? 1 : 0;
+			}
+		}
+		else
+		{
+			$data['intention'] = $housingapp['intention'];
+			if (isset($data['roompick']))
+				$data['trroompicks'] = implode(",",$data['roompick']);
+		}
+		
+		$data['modified'] = $now;
+
+		if (isset($housingapp['created']))
+		{
+			$data['created'] = $housingapp['created'];
+		}
+		else
+		{
+			$data['created'] = $now;
+		}
+
+		if (isset($housingapp['hdeposit_date']))
+		{
+			$data['hdeposit_date'] = $housingapp['hdeposit_date'];
+		}
+
+		if (isset($housingapp['checkedin']))
+		{
+			$data['checkedinby'] = $housingapp['checkedinby'];
+			$data['checkedinwhen'] = $housingapp['checkedinwhen'];
+		}
+
+		if ($admin == TRUE)
+		{
+			$data['current_building'] = $housingapp['current_building'];
+			$data['current_room'] = $housingapp['current_room'];
+		}
+
+		// Since using MySQL, can use a single REPLACE instead of check for existence
+		// and then having to use INSERT or UPDATE
+		//
+		$sql = "REPLACE INTO housing_app 
+							(
+								pidm,
+								studentid,
+								student_id_entered,
+								ranking,
+								username,
+								lastname,
+								firstname,
+								gender,
+								dob,
+								housing_area,
+								application_type,
+								mealplan,
+								phone,
+								intention,
+								year_term,
+								term,
+								studenttype,
+								attending,
+								smpref,
+								circadia,
+								interest1,
+								interest2,
+								interest3,
+								roommate1id,
+								roommate1l,
+								roommate1f,
+								roommate2id,
+								roommate2l,
+								roommate2f,
+								roommate3id,
+								roommate3l,
+								roommate3f,
+								comments,
+								buildreq1,
+								buildreq2,
+								buildreq3,
+								signed_leasedining,
+								signed_foryear,
+								notes,
+								groupno,
+								current_building,
+								current_room,
+								assigned,
+								assigned_building,
+								assigned_room,
+								checkedin,
+								checkedinby,
+								checkedinwhen,
+								trroompicks,
+								rnroompicks,
+								rn_roompick_lws,
+								rn_roompick_lwd,
+								rn_roompick_lw4,
+								rn_roompick_a24,
+								rn_roompick_a22,
+								rn_roompick_a12,
+								rn_roompick_a11,
+								created,
+								modified,
+								hdeposit_date,
+								misc
+
+							)
+						VALUES 
+							(
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?,
+								?
+							)";
+
+  $rs = PSU::db('reslife')->Execute($sql,
+						array(
+								$data['pidm'],
+								$data['studentid'],
+								$data['student_id_entered'],
+								$ranking,
+								$data['username'],
+								$data['lastname'],
+								$data['firstname'],
+								$data['gender'],
+								$data['dob'],
+								$data['housing_area'],
+								$data['application_type'],
+								$data['mealplan'],
+								$data['phone'],
+								$data['intention'],
+								$data['year_term'],
+								$data['term'],
+								$data['studenttype'],
+								$data['attending'],
+								$data['smpref'],
+								$data['circadia'],
+								$data['interest1'],
+								$data['interest2'],
+								$data['interest3'],
+								$data['roommate1id'],
+								$data['roommate1l'],
+								$data['roommate1f'],
+								$data['roommate2id'],
+								$data['roommate2l'],
+								$data['roommate2f'],
+								$data['roommate3id'],
+								$data['roommate3l'],
+								$data['roommate3f'],
+								$data['comments'],
+								$data['buildreq1'],
+								$data['buildreq2'],
+								$data['buildreq3'],
+								$data['signed_leasedining'],
+								$data['signed_foryear'],
+								$data['notes'],
+								$data['groupno'],
+								$data['current_building'],
+								$data['current_room'],
+								$data['assigned'],
+								$data['assigned_building'],
+								$data['assigned_room'],
+								$data['checkedin'],
+								$data['checkedinby'],
+								$data['checkedinwhen'],
+								$data['trroompicks'],
+								$data['rnroompicks'],
+								$data['rn_roompick_lws'],
+								$data['rn_roompick_lwd'],
+								$data['rn_roompick_lw4'],
+								$data['rn_roompick_a24'],
+								$data['rn_roompick_a22'],
+								$data['rn_roompick_a12'],
+								$data['rn_roompick_a11'],
+								$data['created'],
+								$data['modified'],
+								$data['hdeposit_date'],
+								1
+								
+								));
+	}
+
+/**
+ * save the updated Housing App information to the database
+ * 
+ * @param int $pidm 
+ * @access public
+ * @return string of query
+ *
+ */ 
+	function saveHousingApp_V2($pidm, $area, $now, $data, $admin) 
+	{
+		$data['pidm'] = $pidm;
+
 		$data['signed_leasedining'] = '';
 		$data['signed_foryear'] = '';
 
@@ -2089,7 +2452,7 @@ mysql  if($results = PSU::db('reslife')->Execute/getRow/fetch($sql, array($pidm)
 				$data['rnroompicks'] = implode(",",$roompick);
 				$data['rn_roompick_lws'] = (in_array('LWS', $roompick)) ? 1 : 0;
 				$data['rn_roompick_lwd'] = (in_array('LWD', $roompick)) ? 1 : 0;
-				$data['rn_roompick_4ps'] = (in_array('4PS', $roompick)) ? 1 : 0;
+				$data['rn_roompick_lw4'] = (in_array('4PS', $roompick)) ? 1 : 0;
 				$data['rn_roompick_2pa'] = (in_array('UA2', $roompick)) ? 1 : 0;
 				$data['rn_roompick_4pa'] = (in_array('4PA', $roompick)) ? 1 : 0;
 				$data['rn_roompick_ntrad'] = (in_array('NTRAD', $roompick)) ? 1 : 0;
@@ -2105,9 +2468,18 @@ mysql  if($results = PSU::db('reslife')->Execute/getRow/fetch($sql, array($pidm)
 		$data['modified'] = $now;
 
 		if (isset($housingapp['created']))
+		{
 			$data['created'] = $housingapp['created'];
+		}
 		else
+		{
 			$data['created'] = $now;
+		}
+
+		if (isset($housingapp['hdeposit_date']))
+		{
+			$data['hdeposit_date'] = $housingapp['hdeposit_date'];
+		}
 
 		// Since using MySQL, can use a single REPLACE instead of check for existence
 		// and then having to use INSERT or UPDATE
@@ -2121,6 +2493,7 @@ mysql  if($results = PSU::db('reslife')->Execute/getRow/fetch($sql, array($pidm)
 								username,
 								lastname,
 								firstname,
+								gender,
 								housing_area,
 								application_type,
 								mealplan,
@@ -2128,8 +2501,6 @@ mysql  if($results = PSU::db('reslife')->Execute/getRow/fetch($sql, array($pidm)
 								intention,
 								year_term,
 								term,
-								year,
-								maritalstatus,
 								studenttype,
 								attending,
 								smpref,
@@ -2162,12 +2533,13 @@ mysql  if($results = PSU::db('reslife')->Execute/getRow/fetch($sql, array($pidm)
 								rnroompicks,
 								rn_roompick_lws,
 								rn_roompick_lwd,
-								rn_roompick_4ps,
+								rn_roompick_lw4,
 								rn_roompick_2pa,
 								rn_roompick_4pa,
 								rn_roompick_ntrad,
 								created,
 								modified,
+								hdeposit_date,
 								misc
 
 							)
@@ -2239,6 +2611,7 @@ mysql  if($results = PSU::db('reslife')->Execute/getRow/fetch($sql, array($pidm)
 								$data['username'],
 								$data['lastname'],
 								$data['firstname'],
+								$data['gender'],
 								$data['housing_area'],
 								$data['application_type'],
 								$data['mealplan'],
@@ -2246,8 +2619,6 @@ mysql  if($results = PSU::db('reslife')->Execute/getRow/fetch($sql, array($pidm)
 								$data['intention'],
 								$data['year_term'],
 								$data['term'],
-								$data['year'],
-								$data['maritalstatus'],
 								$data['studenttype'],
 								$data['attending'],
 								$data['smpref'],
@@ -2280,16 +2651,18 @@ mysql  if($results = PSU::db('reslife')->Execute/getRow/fetch($sql, array($pidm)
 								$data['rnroompicks'],
 								$data['rn_roompick_lws'],
 								$data['rn_roompick_lwd'],
-								$data['rn_roompick_4ps'],
+								$data['rn_roompick_lw4'],
 								$data['rn_roompick_2pa'],
 								$data['rn_roompick_4pa'],
 								$data['rn_roompick_ntrad'],
 								$data['created'],
 								$data['modified'],
+								$data['hdeposit_date'],
 								1
 								
 								));
 	}
+
 /**
  * save the updated Housing App information to the database
  * 

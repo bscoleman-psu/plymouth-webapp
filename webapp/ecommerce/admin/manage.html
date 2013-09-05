@@ -1,0 +1,70 @@
+<?php
+require_once 'autoload.php';
+PSU::session_start(); // force ssl + start a session
+
+$GLOBALS['PARENT_URL'] = '/webapp/ecommerce';
+$GLOBALS['BASE_URL'] = '/webapp/ecommerce/admin';
+$GLOBALS['BASE_DIR'] = __DIR__;
+
+$GLOBALS['TITLE'] = 'PSU eCommerce Admin';
+$GLOBALS['TEMPLATES'] = $GLOBALS['BASE_DIR'].'/../templates/admin';
+
+$tpl = new PSUTemplate();
+	
+require_once('includes/AdminManager.class.php');
+$manager = new AdminManager();
+
+$tpl->assign('processes', $manager->getAllProcesses());
+	
+// *** Handle adds and edits ***
+if(is_numeric($_GET['edit'])){
+
+	if($_SERVER['REQUEST_METHOD']=='POST'){
+		$process = $_POST;
+		if($process['name']=='' || $process['type']=='' || $process['code']=='' || $process['class']==''){
+			$_SESSION['errors'][]="Please fill in all fields.";
+			$tpl->assign('process', $process);
+		}
+		else{
+			$manager->updateProcess($process);
+			PSUHTML::redirect($GLOBALS['BASE_URL'].'/manage.html?success=edit');
+		}
+		
+	}
+	else{
+		$tpl->assign('process', $manager->getProcess($_GET['edit']));
+	}
+	$tpl->assign('editing', $_GET['edit']);
+	$tpl->assign('subcontent', 'edit_process.tpl');
+}
+elseif($_GET['add']){
+
+	if($_SERVER['REQUEST_METHOD']=='POST'){
+		$process = $_POST;
+		if($process['name']=='' || $process['type']=='' || $process['code']=='' || $process['class']==''){
+			$_SESSION['errors'][]="Please fill in all fields.";
+			$tpl->assign('process', $process);
+		}
+		else{
+			$manager->addProcess($process);
+			PSUHTML::redirect($GLOBALS['BASE_URL'].'/manage.html?success=add');
+		}
+		
+	}
+
+	$tpl->assign('subcontent', 'add_process.tpl');
+
+}
+elseif($_GET['delete']){
+	
+	$manager->deleteProcess($_GET['delete']);
+	PSUHTML::redirect($GLOBALS['BASE_URL'].'/admin/manage.html?success=delet');
+
+}
+elseif($_GET['success']){
+	$_SESSION['successes'][] = $_GET['success'];
+}
+
+$tpl->assign('content', 'manage.tpl');
+
+$tpl->display('index.tpl');
